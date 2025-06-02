@@ -30,18 +30,27 @@ void Server::Attach()
 
 void Server::Run()
 {
-    constexpr std::chrono::
-        milliseconds timeStep(mServerStepMs);
-    mRunning = true;
+    using namespace std::chrono;
+    constexpr milliseconds timeStep(mServerStepMs);
+
+    mStartTime = std::chrono::high_resolution_clock::now();
 
     while (mRunning && !Shutdown::should_shutdown())
     {
+        auto currentTime = high_resolution_clock::now();
+        mTime = duration_cast<milliseconds>(currentTime - mStartTime).count();
         Step();
-        std::this_thread::sleep_for(timeStep);
+
+        auto workTime = high_resolution_clock::now() - currentTime;
+        auto sleepTime = timeStep - workTime;
+
+        if (sleepTime > nanoseconds(0))
+        {
+            std::this_thread::sleep_for(sleepTime);
+        }
     }
 
-    PacketHeader packet = {
-        .type = MSG::DISCONNECT};
+    PacketHeader packet = {.type = MSG::DISCONNECT};
     for (auto &[address, info] : mClients)
     {
         mSock.SendTo(&packet, sizeof(PacketHeader), address);
@@ -59,12 +68,21 @@ void Server::ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender)
 
     if (mClients.find(sender) == mClients.end() && packet->type == MSG::CONNECT)
     {
-        mClients[sender] = ClientInfo{.lastCheckIn = 0};
+        mClients[sender] = ClientInfo{.lastCheckIn = 0, .id = ntohs(sender.sin_port)};
+        PacketHeader p1;
+        p1.type = MSG::CONNECT;
+        mSock.SendTo(&p1, sizeof(PacketHeader), sender);
+
+        TimeSyncPacket p2;
+        p2.serverTime = mTime;
+        p2.startTimeNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                mStartTime.time_since_epoch())
+                                .count();
+        mSock.SendTo(&p2, sizeof(TimeSyncPacket), sender);
         return;
     }
     else
     {
-
         mClients[sender].lastCheckIn = 0;
 
         switch (packet->type)
@@ -77,13 +95,11 @@ void Server::ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender)
         }
         case MSG::PLAYER_UPDATE:
         {
-
             auto data = reinterpret_cast<PlayerUpdatePacket *>(buffer);
             for (int i = 0; i < INPUT_BUFFER_SIZE; i++)
             {
-                ApplyInput(&mClients[sender].player.position, data->input[i]);
+                ApplyInput(&mClients[sender].position, data->input[i]);
             }
-
             break;
         }
         }
@@ -106,20 +122,19 @@ void Server::Step()
         }
         else
         {
-
-            std::cout << it->second.lastCheckIn << '\n';
             ++it;
         }
     }
 
     WorldUpdatePacket packet;
+    packet.time = mTime;
 
     int i = 0;
     for (auto &[address, client] : mClients)
     {
-        packet.players[i++] = client.player;
+        packet.playerIds[i] = client.id;
+        packet.playerPositions[i++] = client.position;
     }
-
     packet.playerCount = mClients.size();
 
     Broadcast(&packet, sizeof(WorldUpdatePacket));

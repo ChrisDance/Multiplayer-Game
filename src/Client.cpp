@@ -42,7 +42,16 @@ void Client::ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender)
 
     switch (packet->type)
     {
+    case MSG::TIME_SYNC:
+    {
+        auto data = reinterpret_cast<TimeSyncPacket *>(buffer);
 
+        mStartTime = std::chrono::high_resolution_clock::time_point(
+            std::chrono::nanoseconds(data->startTimeNanos));
+
+        std::cout << "Time sync - Server time: " << data->serverTime << "ms\n";
+        break;
+    }
     case MSG::DISCONNECT:
     {
         mRunning = false;
@@ -53,12 +62,10 @@ void Client::ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender)
     {
         std::lock_guard<std::mutex> lock(mMutex);
         auto data = reinterpret_cast<WorldUpdatePacket *>(buffer);
-        mPlayers.clear();
         for (int i = 0; i < data->playerCount; i++)
         {
-            mPlayers.push_back(data->players[i]);
+            mPlayers[data->playerIds[i]].positions.push({data->playerPositions[i], data->time});
         }
-
         break;
     }
 
@@ -73,30 +80,37 @@ void Client::Run()
     {
         return;
     }
-    InitWindow(WORLD_WIDTH, WORLD_HEIGHT, "Multiplayer Game");
-    SetTargetFPS(50);
 
-    uint64_t sequenceNumber = 0;
+    PacketHeader connectPacket = {.type = MSG::CONNECT};
+    mSock.SendTo(&connectPacket, sizeof(PacketHeader), mServerAddr);
+
+    InitWindow(WORLD_WIDTH, WORLD_HEIGHT, "Multiplayer");
+    SetTargetFPS(100);
 
     PlayerUpdatePacket packet;
 
     while (mRunning && !WindowShouldClose())
     {
+
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        mServerTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          currentTime - mStartTime)
+                          .count();
+
         Render();
 
         uint8_t input = EncodeInput();
-        packet.input[sequenceNumber % INPUT_BUFFER_SIZE] = input;
+        packet.input[mSequenceNumber % INPUT_BUFFER_SIZE] = input;
 
-        if (sequenceNumber % INPUT_BUFFER_SIZE == 0)
+        if (mSequenceNumber % INPUT_BUFFER_SIZE == 0)
         {
             mSock.SendTo(&packet, sizeof(PlayerUpdatePacket), mServerAddr);
         }
 
-        sequenceNumber++;
+        mSequenceNumber++;
     }
 
-    PacketHeader disconnect = {
-        .type = MSG::DISCONNECT};
+    PacketHeader disconnect = {.type = MSG::DISCONNECT};
     mSock.SendTo(&disconnect, sizeof(PacketHeader), mServerAddr);
     mSock.Close();
 }
@@ -120,15 +134,57 @@ void Client::Render()
     DrawGrid(100, 50);
     rlPopMatrix();
 
+    float renderTime = mServerTime - 200;
+
     mMutex.lock();
-    for (auto &player : mPlayers)
+    for (auto &[id, player] : mPlayers)
     {
-        DrawCircle(player.position.x, player.position.y, 10, RED);
+        Vector2 position = GetInterpolatedPosition(player, renderTime);
+        DrawCircle(position.x, position.y, 10, mPort == id ? RED : BLUE);
     }
 
     mMutex.unlock();
     EndMode2D();
     EndDrawing();
+}
+
+Vector2 Client::GetInterpolatedPosition(Player &player, float renderTime)
+{
+    // Find the two snapshots that bracket the target time
+    Position *before = nullptr;
+    Position *after = nullptr;
+
+    int size = player.positions.size();
+    auto &positionHistory = player.positions;
+
+    for (int i = 0; i < size - 1; i++)
+    {
+        if (positionHistory.at(i).time <= renderTime &&
+            positionHistory.at(i + 1).time >= renderTime)
+        {
+            before = &positionHistory.at(i);
+            after = &positionHistory.at(i + 1);
+            break;
+        }
+    }
+
+    if (!before || !after)
+    {
+        if (!positionHistory.size())
+        {
+            return {0, 0};
+        }
+        /* If for whatever reason, our render time is outside of the buffered positions*/
+        std::cout << "time: " << renderTime << ", latest: " << positionHistory.back().time << ", last: " << positionHistory.front().time << '\n';
+        return positionHistory.back().position;
+    }
+
+    float t = static_cast<float>(renderTime - before->time) /
+              static_cast<float>(after->time - before->time);
+
+    return Vector2{
+        Lerp(before->position.x, after->position.x, t),
+        Lerp(before->position.y, after->position.y, t)};
 }
 
 uint8_t Client::EncodeInput()

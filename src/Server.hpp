@@ -28,6 +28,8 @@ private:
     static const int mServerStepMs = 100;
     std::map<sockaddr_in, ClientInfo, SockAddrCompare> mClients;
     std::mutex mMutex;
+    std::chrono::high_resolution_clock::time_point mStartTime;
+    float mTime{0.0f};
 
     void ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender);
     void Step();
