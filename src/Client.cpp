@@ -2,7 +2,6 @@
 
 Client::Client(int port, int serverPort) : mPort(port)
 {
-
     mServerAddr = UdpSocket::CreateAddress("127.0.0.1", serverPort);
 }
 
@@ -31,13 +30,35 @@ void Client::Attach()
 
 void Client::ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender)
 {
-    std::cout << "message from server: " << buffer << '\n';
+    if (sender.sin_addr.s_addr != mServerAddr.sin_addr.s_addr || sender.sin_port != mServerAddr.sin_port)
+    {
+        return;
+    }
+
+    auto packet = reinterpret_cast<PacketHeader *>(buffer);
+
+    switch (packet->type)
+    {
+
+    case MSG::DISCONNECT:
+    {
+        mRunning = false;
+        break;
+    }
+
+    default:
+        break;
+    }
 }
 
 void Client::Run()
 {
-    using namespace std::chrono;
-    constexpr milliseconds timeStep(1000);
+
+    PacketHeader connectPacket = {.type = MSG::CONNECT};
+    mSock.SendTo(&connectPacket, sizeof(PacketHeader), mServerAddr);
+    constexpr std::chrono::milliseconds timeStep(1000);
+
+    mRunning = true;
 
     int ticks = 0;
     while (mRunning)
@@ -52,6 +73,8 @@ void Client::Run()
             mRunning = false;
         }
     }
+
+    std::cout << "Shutting down\n";
 
     mSock.Close();
 }

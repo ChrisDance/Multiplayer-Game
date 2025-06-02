@@ -1,6 +1,9 @@
 #include "Server.hpp"
 
-Server::Server(int port) : mPort(port) {};
+Server::Server(int port) : mPort(port)
+{
+    Shutdown::setup();
+};
 
 void Server::Attach()
 {
@@ -27,33 +30,75 @@ void Server::Attach()
 
 void Server::Run()
 {
-    using namespace std::chrono;
-    constexpr milliseconds timeStep(1000);
+    constexpr std::chrono::
+        milliseconds timeStep(1000);
+    mRunning = true;
 
-    int ticks = 0;
-    std::string msg("Hello there client!");
-
-    while (mRunning)
+    while (mRunning && !Shutdown::should_shutdown())
     {
+        Step();
         std::this_thread::sleep_for(timeStep);
+    }
 
-        for (auto &client : mClients)
-        {
-            mSock.SendTo(msg.c_str(), msg.size(), client);
-        }
-
-        if (ticks++ > 10)
-        {
-            mRunning = false;
-        }
+    PacketHeader packet = {
+        .type = MSG::DISCONNECT};
+    for (auto &[address, info] : mClients)
+    {
+        mSock.SendTo(&packet, sizeof(PacketHeader), address);
     }
 
     mSock.Close();
+    std::cout << "Shutting down\n";
 }
 
 void Server::ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender)
 {
 
-    mClients.insert(sender);
-    std::cout << "message from client " << sender.sin_port << ": " << buffer << '\n';
+    std::lock_guard<std::mutex> lock(mMutex);
+    auto packet = reinterpret_cast<PacketHeader *>(buffer);
+
+    if (mClients.find(sender) == mClients.end() && packet->type == MSG::CONNECT)
+    {
+        mClients[sender] = ClientInfo{.lastCheckIn = 0};
+        return;
+    }
+    else
+    {
+
+        mClients[sender].lastCheckIn = 0;
+
+        switch (packet->type)
+        {
+        case MSG::DISCONNECT:
+        {
+            mClients.erase(sender);
+            break;
+        }
+        }
+
+        std::cout << "message from client " << sender.sin_port << ": " << buffer << '\n';
+    }
+}
+
+void Server::Step()
+{
+
+    const int heartBeatCutoff = 10;
+    std::lock_guard<std::mutex> lock(mMutex);
+    for (auto it = mClients.begin(); it != mClients.end();)
+    {
+        if (it->second.lastCheckIn++ > heartBeatCutoff)
+        {
+            PacketHeader disconnectPacket = {.type = MSG::DISCONNECT};
+            mSock.SendTo(&disconnectPacket, sizeof(PacketHeader), it->first);
+            it = mClients.erase(it);
+            std::cout << "Client disconnected\n";
+        }
+        else
+        {
+
+            std::cout << it->second.lastCheckIn << '\n';
+            ++it;
+        }
+    }
 }

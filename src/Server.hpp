@@ -1,6 +1,9 @@
 #pragma once
 #include "UdpSocket.hpp"
-#include <set>
+#include "Shared.hpp"
+#include "Shutdown.hpp"
+#include <mutex>
+#include <map>
 
 class Server
 {
@@ -22,9 +25,11 @@ private:
     UdpSocket mSock;
     int mPort;
     bool mRunning{false};
-    std::set<sockaddr_in, SockAddrCompare> mClients;
+    std::map<sockaddr_in, ClientInfo, SockAddrCompare> mClients;
+    std::mutex mMutex;
 
     void ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender);
+    void Step();
 
 public:
     Server(int port);

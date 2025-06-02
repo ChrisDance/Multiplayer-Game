@@ -1,5 +1,7 @@
 #pragma once
 #include "UdpSocket.hpp"
+#include "Shutdown.hpp"
+#include "Shared.hpp"
 
 class Client
 {
