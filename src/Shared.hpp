@@ -4,6 +4,7 @@
 #include <mutex>
 #include "raylib.h"
 #include "raymath.h"
+#include <queue>
 #include "CircularBuffer.hpp"
 
 #define INPUT_BUFFER_SIZE 10
@@ -32,10 +33,23 @@ struct Player
     CircularBuffer<Position> positions{10};
 };
 
+struct InputEntry
+{
+    uint64_t sequenceNum;
+    uint8_t input[INPUT_BUFFER_SIZE];
+
+    bool operator>(const InputEntry &other) const
+    {
+        return sequenceNum > other.sequenceNum;
+    }
+};
+
 struct ClientInfo
 {
     uint64_t lastCheckIn{0};
     int id;
+    std::priority_queue<InputEntry, std::vector<InputEntry>, std::greater<InputEntry>> inputQueue;
+    uint64_t lastProcessedSequence{0};
     Vector2 position;
 };
 
@@ -54,9 +68,8 @@ struct TimeSyncPacket
 struct PlayerUpdatePacket
 {
     PacketHeader header{.type = MSG::PLAYER_UPDATE};
-    uint8_t input[INPUT_BUFFER_SIZE];
+    InputEntry entry;
 };
-
 struct WorldUpdatePacket
 {
     PacketHeader header{.type = MSG::WORLD_UPDATE};

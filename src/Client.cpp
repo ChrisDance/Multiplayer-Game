@@ -100,10 +100,11 @@ void Client::Run()
         Render();
 
         uint8_t input = EncodeInput();
-        packet.input[mSequenceNumber % INPUT_BUFFER_SIZE] = input;
+        packet.entry.input[mSequenceNumber % INPUT_BUFFER_SIZE] = input;
 
         if (mSequenceNumber % INPUT_BUFFER_SIZE == 0)
         {
+            packet.entry.sequenceNum = mSequenceNumber;
             mSock.SendTo(&packet, sizeof(PlayerUpdatePacket), mServerAddr);
         }
 

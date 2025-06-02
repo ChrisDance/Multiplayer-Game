@@ -96,12 +96,11 @@ void Server::ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender)
         case MSG::PLAYER_UPDATE:
         {
             auto data = reinterpret_cast<PlayerUpdatePacket *>(buffer);
-            for (int i = 0; i < INPUT_BUFFER_SIZE; i++)
-            {
-                ApplyInput(&mClients[sender].position, data->input[i]);
-            }
+            mClients[sender].inputQueue.push(data->entry);
             break;
         }
+        default:
+            break;
         }
     }
 }
@@ -132,6 +131,36 @@ void Server::Step()
     int i = 0;
     for (auto &[address, client] : mClients)
     {
+        int inputsProcessed = 0;
+        const int maxInputsPerFrame = 10;
+        while (!client.inputQueue.empty() && inputsProcessed < maxInputsPerFrame)
+        {
+            const InputEntry &entry = client.inputQueue.top();
+
+            if (entry.sequenceNum <= client.lastProcessedSequence)
+            {
+                client.inputQueue.pop();
+                continue;
+            }
+
+            for (auto &input : entry.input)
+            {
+                ApplyInput(&client.position, input);
+            }
+
+            client.lastProcessedSequence = entry.sequenceNum;
+
+            client.inputQueue.pop();
+            inputsProcessed++;
+        }
+
+        const size_t maxQueueSize = 100;
+
+        while (client.inputQueue.size() > maxQueueSize)
+        {
+            client.inputQueue.pop();
+        }
+
         packet.playerIds[i] = client.id;
         packet.playerPositions[i++] = client.position;
     }
