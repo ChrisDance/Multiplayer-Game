@@ -35,7 +35,6 @@ private:
     void ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender);
     void Step();
     void Broadcast(void *data, int size);
-    void ApplyInput(Vector2 *position, uint8_t input, uint32_t radius);
     void CreateDots();
     Vector2 GetRandomPosition();
     void CheckPlayerCollisions();

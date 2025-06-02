@@ -90,3 +90,5 @@ struct WorldUpdatePacket
     Vector2 playerPositions[MAX_PLAYER_COUNT];
     uint32_t playerRadius[MAX_PLAYER_COUNT];
 };
+
+void ApplyInput(Vector2 *position, uint8_t input, uint32_t radius);

@@ -8,8 +8,23 @@
 class Client
 {
 
+    struct Self
+    {
+        uint32_t radius{10};
+        Vector2 position;
+    };
+
+    struct Input
+    {
+        uint64_t sequenceNum;
+        uint8_t input;
+    };
+
 private:
     UdpSocket mSock;
+    Self mSelf;
+    uint64_t mLastSent{0};
+    CircularBuffer<Input> mPredicted{20};
     int mPort;
     sockaddr_in mServerAddr;
     bool mRunning{false};

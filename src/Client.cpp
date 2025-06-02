@@ -64,6 +64,36 @@ void Client::ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender)
         auto data = reinterpret_cast<WorldUpdatePacket *>(buffer);
         for (int i = 0; i < data->playerCount; i++)
         {
+
+            if (mPort == data->playerIds[i])
+            {
+
+                Vector2 predictedPos = mSelf.position;
+
+                mSelf.position = data->playerPositions[i];
+                mSelf.radius = data->playerRadius[i];
+
+                int i = mPredicted.size();
+
+                while (i--)
+                {
+                    auto input = mPredicted.front();
+                    if (input.sequenceNum > mLastSent)
+                    {
+                        ApplyInput(&mSelf.position, input.input, mSelf.radius);
+                    }
+
+                    mPredicted.pop();
+                }
+
+                if (predictedPos != mSelf.position)
+                {
+                    std::cout << "Misprediction\n";
+                }
+
+                continue;
+            }
+
             mPlayers[data->playerIds[i]].positions.push({data->playerPositions[i], data->time});
             mPlayers[data->playerIds[i]].radius = data->playerRadius[i];
         }
@@ -113,14 +143,20 @@ void Client::Run()
         Render();
 
         uint8_t input = EncodeInput();
+
         packet.entry.input[mSequenceNumber % INPUT_BUFFER_SIZE] = input;
+
+        mMutex.lock();
+        mPredicted.push({mSequenceNumber, input});
+        ApplyInput(&mSelf.position, input, mSelf.radius);
+        mMutex.unlock();
 
         if (mSequenceNumber % INPUT_BUFFER_SIZE == 0)
         {
             packet.entry.sequenceNum = mSequenceNumber;
             mSock.SendTo(&packet, sizeof(PlayerUpdatePacket), mServerAddr);
+            mLastSent = mSequenceNumber;
         }
-
         mSequenceNumber++;
     }
 
@@ -148,13 +184,15 @@ void Client::Render()
     DrawGrid(100, 50);
     rlPopMatrix();
 
+    float renderTime = mServerTime - 200;
+    mMutex.lock();
     for (int i = 0; i < DOT_COUNT; i++)
     {
         DrawCircle(mDots[i].x, mDots[i].y, DOT_RADIUS, GREEN);
     }
-    float renderTime = mServerTime - 200;
 
-    mMutex.lock();
+    DrawCircle(mSelf.position.x, mSelf.position.y, mSelf.radius, RED);
+
     for (auto &[id, player] : mPlayers)
     {
         Vector2 position = GetInterpolatedPosition(player, renderTime);
