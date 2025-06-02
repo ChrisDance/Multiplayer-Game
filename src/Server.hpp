@@ -25,11 +25,14 @@ private:
     UdpSocket mSock;
     int mPort;
     bool mRunning{false};
+    static const int mServerStepMs = 100;
     std::map<sockaddr_in, ClientInfo, SockAddrCompare> mClients;
     std::mutex mMutex;
 
     void ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender);
     void Step();
+    void Broadcast(void *data, int size);
+    void ApplyInput(Vector2 *position, uint8_t input);
 
 public:
     Server(int port);

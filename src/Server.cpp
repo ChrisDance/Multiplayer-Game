@@ -31,7 +31,7 @@ void Server::Attach()
 void Server::Run()
 {
     constexpr std::chrono::
-        milliseconds timeStep(1000);
+        milliseconds timeStep(mServerStepMs);
     mRunning = true;
 
     while (mRunning && !Shutdown::should_shutdown())
@@ -72,11 +72,21 @@ void Server::ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender)
         case MSG::DISCONNECT:
         {
             mClients.erase(sender);
+            std::cout << "Client disconnected\n";
+            break;
+        }
+        case MSG::PLAYER_UPDATE:
+        {
+
+            auto data = reinterpret_cast<PlayerUpdatePacket *>(buffer);
+            for (int i = 0; i < INPUT_BUFFER_SIZE; i++)
+            {
+                ApplyInput(&mClients[sender].player.position, data->input[i]);
+            }
+
             break;
         }
         }
-
-        std::cout << "message from client " << sender.sin_port << ": " << buffer << '\n';
     }
 }
 
@@ -101,4 +111,38 @@ void Server::Step()
             ++it;
         }
     }
+
+    WorldUpdatePacket packet;
+
+    int i = 0;
+    for (auto &[address, client] : mClients)
+    {
+        packet.players[i++] = client.player;
+    }
+
+    packet.playerCount = mClients.size();
+
+    Broadcast(&packet, sizeof(WorldUpdatePacket));
+}
+
+void Server::Broadcast(void *data, int size)
+{
+    for (auto &[address, client] : mClients)
+    {
+        mSock.SendTo(data, size, address);
+    }
+}
+
+void Server::ApplyInput(Vector2 *position, uint8_t input)
+{
+    const float MOVE_SPEED = (10.0f);
+
+    if (input & (1 << 0))
+        position->y -= MOVE_SPEED;
+    if (input & (1 << 1))
+        position->y += MOVE_SPEED;
+    if (input & (1 << 2))
+        position->x += MOVE_SPEED;
+    if (input & (1 << 3))
+        position->x -= MOVE_SPEED;
 }
