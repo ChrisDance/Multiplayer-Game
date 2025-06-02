@@ -16,7 +16,7 @@ private:
     float mServerTime{0};
     std::chrono::high_resolution_clock::time_point mStartTime;
     uint64_t mSequenceNumber{0};
-
+    Vector2 mDots[DOT_COUNT];
     std::map<int, Player> mPlayers;
     std::mutex mMutex;
     void ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender);

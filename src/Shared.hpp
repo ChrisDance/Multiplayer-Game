@@ -11,6 +11,8 @@
 #define MAX_PLAYER_COUNT 10
 #define WORLD_WIDTH 400
 #define WORLD_HEIGHT 300
+#define DOT_COUNT 10
+#define DOT_RADIUS 3
 
 enum class MSG
 {
@@ -18,7 +20,8 @@ enum class MSG
     DISCONNECT,
     PLAYER_UPDATE,
     WORLD_UPDATE,
-    TIME_SYNC
+    TIME_SYNC,
+    DOT_UPDATE
 };
 
 struct Position
@@ -30,6 +33,7 @@ struct Position
 struct Player
 {
     int id;
+    uint32_t radius{10};
     CircularBuffer<Position> positions{10};
 };
 
@@ -51,6 +55,7 @@ struct ClientInfo
     std::priority_queue<InputEntry, std::vector<InputEntry>, std::greater<InputEntry>> inputQueue;
     uint64_t lastProcessedSequence{0};
     Vector2 position;
+    uint32_t radius{10};
 };
 
 struct PacketHeader
@@ -70,6 +75,12 @@ struct PlayerUpdatePacket
     PacketHeader header{.type = MSG::PLAYER_UPDATE};
     InputEntry entry;
 };
+struct DotUpdatePacket
+{
+    PacketHeader header{.type = MSG::DOT_UPDATE};
+    Vector2 positions[DOT_COUNT];
+};
+
 struct WorldUpdatePacket
 {
     PacketHeader header{.type = MSG::WORLD_UPDATE};
@@ -77,4 +88,5 @@ struct WorldUpdatePacket
     int playerCount;
     int playerIds[MAX_PLAYER_COUNT];
     Vector2 playerPositions[MAX_PLAYER_COUNT];
+    uint32_t playerRadius[MAX_PLAYER_COUNT];
 };

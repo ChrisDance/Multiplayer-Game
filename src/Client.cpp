@@ -65,6 +65,19 @@ void Client::ReceiveMessage(char *buffer, int bytesRead, sockaddr_in sender)
         for (int i = 0; i < data->playerCount; i++)
         {
             mPlayers[data->playerIds[i]].positions.push({data->playerPositions[i], data->time});
+            mPlayers[data->playerIds[i]].radius = data->playerRadius[i];
+        }
+
+        break;
+    }
+    case MSG::DOT_UPDATE:
+    {
+        auto data = reinterpret_cast<DotUpdatePacket *>(buffer);
+        {
+            for (int i = 0; i < DOT_COUNT; i++)
+            {
+                mDots[i] = data->positions[i];
+            }
         }
         break;
     }
@@ -135,13 +148,17 @@ void Client::Render()
     DrawGrid(100, 50);
     rlPopMatrix();
 
+    for (int i = 0; i < DOT_COUNT; i++)
+    {
+        DrawCircle(mDots[i].x, mDots[i].y, DOT_RADIUS, GREEN);
+    }
     float renderTime = mServerTime - 200;
 
     mMutex.lock();
     for (auto &[id, player] : mPlayers)
     {
         Vector2 position = GetInterpolatedPosition(player, renderTime);
-        DrawCircle(position.x, position.y, 10, mPort == id ? RED : BLUE);
+        DrawCircle(position.x, position.y, player.radius, mPort == id ? RED : BLUE);
     }
 
     mMutex.unlock();
