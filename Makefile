@@ -1,28 +1,33 @@
 
+CXX = clang++
+CXXFLAGS = -std=c++23 -Wall -Wextra -O2 -g
+INCLUDES = -I/opt/homebrew/include
+LIBS = -L/opt/homebrew/lib -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo
 
+SRC_DIR = src
+BUILD_DIR = build
+TARGET = bin
 
-CXX = g++
-CXXFLAGS = -Wall -Wextra -std=c++23 -Wno-missing-field-initializers -g 
+SOURCES = $(wildcard $(SRC_DIR)/*.cpp)
+OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 
-RAYLIB_PATH = $(shell brew --prefix raylib)
-RAYLIB_INCLUDE = -I$(RAYLIB_PATH)
-RAYLIB_LIB = -L$(RAYLIB_PATH)/lib -lraylib
+all: $(BUILD_DIR) $(TARGET)
 
-MACOS_FRAMEWORKS = -framework CoreVideo -framework IOKit -framework Cocoa -framework GLUT -framework OpenGL
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
-INCLUDES = -I./src -I./lib $(RAYLIB_INCLUDE)
+$(TARGET): $(OBJECTS)
+	$(CXX) $(OBJECTS) -o $(TARGET) $(LIBS)
 
-SOURCES = $(wildcard src/*.cpp) 
-HEADERS = $(wildcard src/*.hpp) $(wildcard lib/*.hpp)
-
-TARGET = bin 
-
-all: $(TARGET)
-
-$(TARGET): $(SOURCES) $(HEADERS)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $(SOURCES) -o $(TARGET) $(RAYLIB_LIB) $(MACOS_FRAMEWORKS)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 clean:
-	rm -f $(TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET)
 
-.PHONY: all clean
+rebuild: clean all
+
+run: $(TARGET)
+	./$(TARGET)
+
+.PHONY: all clean rebuild run
